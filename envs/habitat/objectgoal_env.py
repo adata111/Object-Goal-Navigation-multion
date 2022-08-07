@@ -1,4 +1,5 @@
 import json
+import time
 import bz2
 import gzip
 import _pickle as cPickle
@@ -22,7 +23,7 @@ class ObjectGoal_Env(habitat.RLEnv):
     def __init__(self, args, rank, config_env, dataset):
         self.args = args
         self.rank = rank
-
+        print("NEW OBJECT CREATED")
         super().__init__(config_env, dataset)
 
         # Loading dataset info file
@@ -61,6 +62,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.map_obj_origin = None
         self.starting_loc = None
         self.starting_distance = None
+        self.done_list = []
 
         # Episode tracking info
         self.curr_distance = None
@@ -71,9 +73,11 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.last_sim_location = None
         self.trajectory_states = []
         self.info = {}
-        self.info['distance_to_goal'] = None
-        self.info['spl'] = None
-        self.info['success'] = None
+        self.info['distance_to_goal'] = []
+        self.info['spl'] = []
+        self.info['success'] = []
+        self.info['is_it_done'] = False
+        self.info['episode_count'] =  0 
 
     def load_new_episode(self):
         """The function loads a fixed episode from the episode dataset. This
@@ -159,19 +163,19 @@ class ObjectGoal_Env(habitat.RLEnv):
         """
 
         args = self.args
-
+        goal_name = []
         self.scene_path = self.habitat_env.sim.config.SCENE
-        scene_name = self.scene_path.split("/")[-1].split(".")[0]
+        self.scene_name = self.scene_path.split("/")[-1].split(".")[0]
 
-        scene_info = self.dataset_info[scene_name]
+        self.scene_info = self.dataset_info[self.scene_name]
         map_resolution = args.map_resolution
 
-        floor_idx = np.random.randint(len(scene_info.keys()))
-        floor_height = scene_info[floor_idx]['floor_height']
-        sem_map = scene_info[floor_idx]['sem_map']
-        map_obj_origin = scene_info[floor_idx]['origin']
+        floor_idx = np.random.randint(len(self.scene_info.keys()))
+        floor_height = self.scene_info[floor_idx]['floor_height']
+        self.sem_map = self.scene_info[floor_idx]['sem_map']
+        map_obj_origin = self.scene_info[floor_idx]['origin']
 
-        cat_counts = sem_map.sum(2).sum(1)
+        cat_counts = self.sem_map.sum(2).sum(1)
         possible_cats = list(np.arange(6))
 
         for i in range(6):
@@ -186,29 +190,38 @@ class ObjectGoal_Env(habitat.RLEnv):
                 print("No valid objects for {}".format(floor_height))
                 eps = eps - 1
                 continue
+            np.random.seed(int(time.time()))
+            goal_idx = np.random.choice(possible_cats, size = args.obj_count, replace=False)
+            # goal_idx = [3,5]
 
-            goal_idx = np.random.choice(possible_cats)
+            # self.done_list = [False] * args.obj_count
+            
+            for i in range(args.obj_count):
+                for key, value in coco_categories.items():
+                    if value == goal_idx[i]:
+                        goal_name.append(key)
 
-            for key, value in coco_categories.items():
-                if value == goal_idx:
-                    goal_name = key
-
+            print(f"In this episode we wish to look for : {goal_name[0]} and {goal_name[1]}")
             selem = skimage.morphology.disk(2)
             traversible = skimage.morphology.binary_dilation(
-                sem_map[0], selem) != True
+                self.sem_map[0], selem) != True
             traversible = 1 - traversible
 
             planner = FMMPlanner(traversible)
 
             selem = skimage.morphology.disk(
                 int(object_boundary * 100. / map_resolution))
+
+            self.selem_goal = selem
+                
+            #Setting the ground truth for 0th goal object
             goal_map = skimage.morphology.binary_dilation(
-                sem_map[goal_idx + 1], selem) != True
+                self.sem_map[goal_idx[0] + 1], selem) != True
             goal_map = 1 - goal_map
 
             planner.set_multi_goal(goal_map)
 
-            m1 = sem_map[0] > 0
+            m1 = self.sem_map[0] > 0
             m2 = planner.fmm_dist > (args.min_d - object_boundary) * 20.0
             m3 = planner.fmm_dist < (args.max_d - object_boundary) * 20.0
 
@@ -218,12 +231,13 @@ class ObjectGoal_Env(habitat.RLEnv):
             if possible_starting_locs.sum() != 0:
                 loc_found = True
             else:
+                #might have to remove this altogether
                 print("Invalid object: {} / {} / {}".format(
-                    scene_name, floor_height, goal_name))
-                possible_cats.remove(goal_idx)
-                scene_info[floor_idx]["sem_map"][goal_idx + 1, :, :] = 0.
-                self.dataset_info[scene_name][floor_idx][
-                    "sem_map"][goal_idx + 1, :, :] = 0.
+                    self.scene_name, floor_height, goal_name[0]))
+                possible_cats.remove(goal_idx[0])
+                self.scene_info[floor_idx]["sem_map"][goal_idx[0] + 1, :, :] = 0.
+                self.dataset_info[self.scene_name][floor_idx][
+                    "sem_map"][goal_idx[0] + 1, :, :] = 0.
 
         loc_found = False
         while not loc_found:
@@ -248,6 +262,8 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.goal_idx = goal_idx
         self.goal_name = goal_name
         self.map_obj_origin = map_obj_origin
+        self.temp_goal_list = goal_idx
+        self.temp_goal_names = goal_name
 
         self.starting_distance = self.gt_planner.fmm_dist[self.starting_loc] \
             / 20.0 + self.object_boundary
@@ -310,7 +326,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         new_scene = self.episode_no % args.num_train_episodes == 0
 
         self.episode_no += 1
-
+        self.info['episode_count'] = self.episode_no
         # Initializations
         self.timestep = 0
         self.stopped = False
@@ -337,9 +353,13 @@ class ObjectGoal_Env(habitat.RLEnv):
         # Set info
         self.info['time'] = self.timestep
         self.info['sensor_pose'] = [0., 0., 0.]
-        self.info['goal_cat_id'] = self.goal_idx
-        self.info['goal_name'] = self.goal_name
-
+        self.info['goal_cat_id'] = self.goal_idx.copy()
+        self.info['goal_name'] = self.goal_name.copy()
+        temp = [False]*args.obj_count
+        self.info['done_list'] = np.reshape(np.array(temp,dtype=bool), (1,args.obj_count))
+        
+        # self.info['obj_count'] = len(self.goal_idx)
+        # self.info['count_']  = 0
         return state, self.info
 
     def step(self, action):
@@ -363,7 +383,7 @@ class ObjectGoal_Env(habitat.RLEnv):
             # Not sending stop to simulator, resetting manually
             action = 3
 
-        obs, rew, done, _ = super().step(action)
+        obs, rew, done, _ = super().step(action) # TODO : Doubt what is it calling?
 
         # Get pose change
         dx, dy, do = self.get_pose_change()
@@ -372,10 +392,68 @@ class ObjectGoal_Env(habitat.RLEnv):
 
         spl, success, dist = 0., 0., 0.
         if done:
+            '''
+            1. made a done_list to append all the done values; then set the done to False so that teh flow of program osn't distrubed
+            2. temp_goal_list and temp_goal_name are temporary copies of goal_idx and goal_name (both lists) ; so that we can pop 
+                and check if any more goals are left to explore
+            '''
+            # self.info['count_'] += 1
+            # print(f"THIS IS THE DONE LIST BEFORE MESS UP : --- {self.info['done_list']}")
+            
+            # res = [i for i, val in enumerate(np.where(self.info['done_list'] == False)) if val]
+            for i, obj_done in enumerate(self.info['done_list'][0]):
+                if not obj_done:
+                    self.info['done_list'][0][i] =True
+                    break
+            # self.info['done_list'][0][res] = True
+            
+            
+            # self.info['done_list'] = np.append(self.info['done_list'],True)
+            # print(f"THIS IS THE DONE LIST AFTER MESS UP : --- {self.info['done_list']}")
+            if len(self.temp_goal_names) != 0:
+                self.temp_goal_list.tolist().pop(0)
+                self.temp_goal_names.pop(0)
+
+            if len(self.temp_goal_names) != 0:
+                
+                goal_map = skimage.morphology.binary_dilation(
+                    self.sem_map[self.temp_goal_list[0] + 1], self.selem_goal) != True
+                goal_map = 1 - goal_map
+                print(f"Should be : T  ,  F : -------------= {self.info['done_list']}")
+                print(f"Yay! We found the previous goal. Setting goal map : {self.temp_goal_names[0]} ")
+                self.gt_planner.set_multi_goal(goal_map)
+                # self.info['done_list'].append(True)
+                '''
+                Should we set the temp_done to equal False : Lets try and find out
+                '''
+                if all(self.info['done_list'][0].tolist()):
+                    done = True
+                    self.stopped  = True
+                    self.info['is_it_done'] = True
+                    print("TYPE - 1 UPDATION")
+                    # self.info['episode_count'] += 1
+                else:
+                    done = False
+                    self.stopped = False
+                    self.last_sim_location = self.get_sim_location()
+                    self.info['time'] = self.timestep
+                    dx, dy, do = self.get_pose_change()
+                    self.info['sensor_pose'] = [dx, dy, do]
+
+            else:
+                print(f"Yay! We found all the goals!!! ")
+                print(f"This is the done list when it has found everything : {self.info['done_list']}")
+                done = True
+                self.stopped = True
+                self.info['is_it_done'] = True
+                print("TYPE-2 UPDATION")
+                # self.info['episode_count'] += 1
+                # self.auto_reset_done = True
+
             spl, success, dist = self.get_metrics()
-            self.info['distance_to_goal'] = dist
-            self.info['spl'] = spl
-            self.info['success'] = success
+            self.info['distance_to_goal'].append(dist)
+            self.info['spl'].append(spl)
+            self.info['success'].append(success)
 
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
@@ -423,9 +501,16 @@ class ObjectGoal_Env(habitat.RLEnv):
 
     def get_done(self, observations):
         if self.info['time'] >= self.args.max_episode_length - 1:
-            done = True
+            done = False
+            self.info['is_it_done'] = True
+            self.info['time'] = self.timestep
+            print("TYPE-3 UPDATION")
+            return not done
+
         elif self.stopped:
             done = True
+            # self.info['is_it_done'] = True
+            print("TYPE-4 UPDATION")
         else:
             done = False
         return done

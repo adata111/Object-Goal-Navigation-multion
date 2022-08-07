@@ -113,7 +113,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
             self.info["g_reward"] = 0
 
         action = self._plan(planner_inputs)
-
+        # print(f"{action} is the Action_decided")
         if self.args.visualize or self.args.print_images:
             self._visualize(planner_inputs)
 
@@ -224,9 +224,16 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
 
         stg, stop = self._get_stg(map_pred, start, np.copy(goal),
                                   planning_window)
+        #manipulate the stop here
+        #
+        # if self.info['count_'] == self.info['obj_count']:
+        # if len(self.temp_goal_list) == 0:
+        #     stop = 1
+        # else :
+        #     stop = 0
 
         # Deterministic Local Policy
-        if stop and planner_inputs['found_goal'] == 1:
+        if  stop and planner_inputs['found_goal'] == 1:
             action = 0  # Stop
         else:
             (stg_x, stg_y) = stg

@@ -7,6 +7,8 @@ def get_args():
         description='Goal-Oriented-Semantic-Exploration')
 
     # General Arguments
+    parser.add_argument('--obj_count', type=int, default=2,
+                        help='number of objects in sequence to search for')
     parser.add_argument('--seed', type=int, default=1,
                         help='random seed (default: 1)')
     parser.add_argument('--auto_gpu_config', type=int, default=1)
@@ -67,7 +69,7 @@ def get_args():
                         help='Frame width (default:160)')
     parser.add_argument('-fh', '--frame_height', type=int, default=120,
                         help='Frame height (default:120)')
-    parser.add_argument('-el', '--max_episode_length', type=int, default=500,
+    parser.add_argument('-el', '--max_episode_length', type=int, default=1000,
                         help="""Maximum episode length""")
     parser.add_argument("--task_config", type=str,
                         default="tasks/objectnav_gibson.yaml",

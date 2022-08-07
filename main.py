@@ -1,4 +1,5 @@
 from collections import deque, defaultdict
+import enum
 import os
 import logging
 import time
@@ -19,7 +20,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 def main():
     args = get_args()
-
+    #2-D list for keeping a record of each object finding in each environment
+    # list_obj_done = [[0 for j in range(args.obj_count)] for i in range(args.num_processes)]  
+    
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
@@ -61,20 +64,20 @@ def main():
             episode_dist.append(deque(maxlen=num_episodes))
 
     else:
-        episode_success = deque(maxlen=1000)
-        episode_spl = deque(maxlen=1000)
-        episode_dist = deque(maxlen=1000)
+        episode_success = deque(maxlen=1000*args.obj_count)
+        episode_spl = deque(maxlen=1000*args.obj_count)
+        episode_dist = deque(maxlen=1000*args.obj_count)
 
     finished = np.zeros((args.num_processes))
     wait_env = np.zeros((args.num_processes))
 
-    g_episode_rewards = deque(maxlen=1000)
+    g_episode_rewards = deque(maxlen=1000*args.obj_count)
 
-    g_value_losses = deque(maxlen=1000)
-    g_action_losses = deque(maxlen=1000)
-    g_dist_entropies = deque(maxlen=1000)
+    g_value_losses = deque(maxlen=1000*args.obj_count)
+    g_action_losses = deque(maxlen=1000*args.obj_count)
+    g_dist_entropies = deque(maxlen=1000*args.obj_count)
 
-    per_step_g_rewards = deque(maxlen=1000)
+    per_step_g_rewards = deque(maxlen=1000*args.obj_count)
 
     g_process_rewards = np.zeros((num_scenes))
 
@@ -257,6 +260,14 @@ def main():
     if args.eval:
         g_policy.eval()
 
+    global_input = torch.zeros(num_scenes, ngc, local_w, local_h)
+    global_orientation = torch.zeros(num_scenes, 1).long()
+
+    
+    # '''
+    # Will have to loop this
+    # '''
+    # while not (all(list_obj_done)):
     # Predict semantic map from frame 1
     poses = torch.from_numpy(np.asarray(
         [infos[env_idx]['sensor_pose'] for env_idx in range(num_scenes)])
@@ -267,9 +278,7 @@ def main():
 
     # Compute Global policy input
     locs = local_pose.cpu().numpy()
-    global_input = torch.zeros(num_scenes, ngc, local_w, local_h)
-    global_orientation = torch.zeros(num_scenes, 1).long()
-
+    
     for e in range(num_scenes):
         r, c = locs[e, 1], locs[e, 0]
         loc_r, loc_c = [int(r * 100.0 / args.map_resolution),
@@ -283,8 +292,8 @@ def main():
         full_map[:, 0:4, :, :])
     global_input[:, 8:, :, :] = local_map[:, 4:, :, :].detach()
     goal_cat_id = torch.from_numpy(np.asarray(
-        [infos[env_idx]['goal_cat_id'] for env_idx
-         in range(num_scenes)]))
+        [infos[env_idx]['goal_cat_id'][0] for env_idx              #use obj_iter for looping
+        in range(num_scenes)]))
 
     extras = torch.zeros(num_scenes, 2)
     extras[:, 0] = global_orientation[:, 0]
@@ -320,27 +329,37 @@ def main():
         p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
         p_input['pose_pred'] = planner_pose_inputs[e]
         p_input['goal'] = goal_maps[e]  # global_goals[e]
-        p_input['new_goal'] = 1
-        p_input['found_goal'] = 0
-        p_input['wait'] = wait_env[e] or finished[e]
+        p_input['new_goal'] = 1 # is it a new long term goal?
+        p_input['found_goal'] = 0 #found the long term goal?
+        p_input['wait'] = wait_env[e] or finished[e] # any scene done or all scenes done?
         if args.visualize or args.print_images:
             local_map[e, -1, :, :] = 1e-5
             p_input['sem_map_pred'] = local_map[e, 4:, :, :
                                                 ].argmax(0).cpu().numpy()
 
     obs, _, done, infos = envs.plan_act_and_preprocess(planner_inputs)
-
+    # list_obj_done[obj_iter] = done
     start = time.time()
     g_reward = 0
-
+    obj_iter = [0]*(args.num_processes)
     torch.set_grad_enabled(False)
     spl_per_category = defaultdict(list)
     success_per_category = defaultdict(list)
 
     for step in range(args.num_training_frames // args.num_processes + 1):
+        
+        # present_idx = [np.where(infos[e]['done_list'][0] == False)[0][0] for e in range(num_scenes)] 
+        present_idx = [0]*num_scenes
+        for e in range(num_scenes):
+            for i, obj_done in enumerate(infos[e]['done_list'][0]):
+                if not obj_done:
+                    present_idx[e] = i
+                    break
+        
+        
         if finished.sum() == args.num_processes:
             break
-
+        
         g_step = (step // args.num_local_steps) % args.num_global_steps
         l_step = step % args.num_local_steps
 
@@ -349,30 +368,77 @@ def main():
         l_masks = torch.FloatTensor([0 if x else 1
                                      for x in done]).to(device)
         g_masks *= l_masks
+        # print(type(infos[e]['done_list']))
+        '''
+        created a new key in the info dictionary for passign around the done_list : which keeps a track of all done values for that particular episode
+            - x should be a numpy array ; instead been shown as float - sorted
+            - we need to work on initi of th e np array so that everytime the list doesn't contain just True ; it beats the purpose - sorted 
+        '''
+        
 
-        for e, x in enumerate(done):
-            if x:
+        # for e,y in enumerate(infos[e]['done_list']):
+        #     print(f"E ------- {e}")
+        #     print(f"The y is -----------{y}")
+        # print(infos[:][:])
+        # print(type(infos[:][:]))
+
+        episode_count = [0]*args.num_processes
+
+        for e, x in enumerate(infos):
+            
+            print(f"This is infos[{e}]['done_list'] : {infos[e]['done_list']}")
+            # print(type(infos[e]['done_list']))
+            # print(type(done))
+            # print(type(x))
+            print(f"THIS IS E: {e}")
+            # print(f"{x['done_list'].tolist()} This is done list when turned to list")
+            # print(all(x['done_list'].tolist()))
+            '''
+            if all element of this supposed np array is True then call for episode termination
+            '''
+            # if all(x['done_list'].tolist()[0]): 
+            print(f"THE VALUE OF IS_IT_DONE for {e} thread is :  ---> {x['is_it_done']}")
+            assert infos[e]['is_it_done'] == x['is_it_done'] , "DUHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH"
+            if infos[e]['is_it_done']:
+
+                infos[e]['is_it_done'] = bool(False)
+                print(f"THE MODIFIED VALUE OF IS_IT_DONE  for {e} thread : is -----> {x['is_it_done']}")
+                print(f"{e} th threaded just finished an episode.")
+                print(f"Completed episode Count for {e} th thread is : {x['episode_count']}")
+                # print(f"Done Searching for {infos[e]['goal_name'][obj_iter[e]]}")
+                print(f"Done Searching about all the objects! OR Time Limit Exceeded")
+                present_idx[e] = 0
                 spl = infos[e]['spl']
                 success = infos[e]['success']
                 dist = infos[e]['distance_to_goal']
-                spl_per_category[infos[e]['goal_name']].append(spl)
-                success_per_category[infos[e]['goal_name']].append(success)
-                if args.eval:
+                spl_per_category[infos[e]['goal_name'][obj_iter[e]]].append(spl)
+                success_per_category[infos[e]['goal_name'][obj_iter[e]]].append(success)
+                # obj_iter[e] += 1
+                if args.eval: #still left to change
                     episode_success[e].append(success)
                     episode_spl[e].append(spl)
                     episode_dist[e].append(dist)
                     if len(episode_success[e]) == num_episodes:
                         finished[e] = 1
                 else:
-                    episode_success.append(success)
+                    episode_success.append(success) #unsure how to set the max length during init
                     episode_spl.append(spl)
                     episode_dist.append(dist)
+
+                # if obj_iter[e] == args.obj_count :
+                # print(f"##############################OBJ-ITER when IT says ALL DONE : {obj_iter[e]}")
+                # print(f"Done with search all the objects : {infos[e]['goal_name']}")
+                # obj_iter[e] = 0
+                # envs.auto_reset_done = True
+                # envs.reset()
+                
                 wait_env[e] = 1.
                 update_intrinsic_rew(e)
                 init_map_and_pose_for_env(e)
         # ------------------------------------------------------------------
-
+            # print(f"[OUTSIDE IF]THE VALUE OF IS_IT_DONE for thread is :  ---> {infos[0]['is_it_done']}")
         # ------------------------------------------------------------------
+        # print(f"[OUTISDE ENU. FOR ]THE VALUE OF IS_IT_DONE for thread is :  ---> {infos[0]['is_it_done']}")
         # Semantic Mapping Module
         poses = torch.from_numpy(np.asarray(
             [infos[env_idx]['sensor_pose'] for env_idx
@@ -392,7 +458,9 @@ def main():
             local_map[e, 2:4, loc_r - 2:loc_r + 3, loc_c - 2:loc_c + 3] = 1.
 
         # ------------------------------------------------------------------
-
+        '''
+        obj_iter mess up needs to be fixed : full raita - sorted
+        '''
         # ------------------------------------------------------------------
         # Global Policy
         if l_step == args.num_local_steps - 1:
@@ -435,9 +503,12 @@ def main():
                 nn.MaxPool2d(args.global_downscaling)(
                     full_map[:, 0:4, :, :])
             global_input[:, 8:, :, :] = local_map[:, 4:, :, :].detach()
+            
             goal_cat_id = torch.from_numpy(np.asarray(
-                [infos[env_idx]['goal_cat_id'] for env_idx
+                [infos[env_idx]['goal_cat_id'][present_idx[env_idx]] for env_idx
                  in range(num_scenes)]))
+            
+            print(f"WE NOW PROCEED TO CALCULATE LONG TERM GOAL FOR : {present_idx[0]}")
             extras[:, 0] = global_orientation[:, 0]
             extras[:, 1] = goal_cat_id
 
@@ -500,13 +571,15 @@ def main():
             goal_maps[e][global_goals[e][0], global_goals[e][1]] = 1
 
         for e in range(num_scenes):
-            cn = infos[e]['goal_cat_id'] + 4
-            if local_map[e, cn, :, :].sum() != 0.:
-                cat_semantic_map = local_map[e, cn, :, :].cpu().numpy()
-                cat_semantic_scores = cat_semantic_map
-                cat_semantic_scores[cat_semantic_scores > 0] = 1.
-                goal_maps[e] = cat_semantic_scores
-                found_goal[e] = 1
+
+            if wait_env[e] != 1:
+                cn = infos[e]['goal_cat_id'][present_idx[e]] + 4
+                if local_map[e, cn, :, :].sum() != 0.:
+                    cat_semantic_map = local_map[e, cn, :, :].cpu().numpy()
+                    cat_semantic_scores = cat_semantic_map
+                    cat_semantic_scores[cat_semantic_scores > 0] = 1.
+                    goal_maps[e] = cat_semantic_scores
+                    found_goal[e] = 1
         # ------------------------------------------------------------------
 
         # ------------------------------------------------------------------
