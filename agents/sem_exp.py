@@ -102,6 +102,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
                          evaluation metric info
         """
 
+        # print(f'%%%%%%%%%%%%%%%%%%%%%%%%%%%%{planner_inputs}')
         # plan
         if planner_inputs["wait"]:
             self.last_action = None

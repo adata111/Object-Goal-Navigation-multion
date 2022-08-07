@@ -417,13 +417,17 @@ class ObjectGoal_Env(habitat.RLEnv):
             if len(self.temp_goal_names) != 0:
                 print(f'&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&{self.temp_goal_list.tolist()}')
                 print(curr_goal)
-                goal_to_be_removed_ind = self.temp_goal_list.tolist().index(curr_goal[0])
-                print(f'&&&&&&&&&&&&&&&&&&&&&&& {goal_to_be_removed_ind} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
-                self.temp_goal_list = np.delete(self.temp_goal_list, goal_to_be_removed_ind)
-                self.info['remaining_goal_cat_id'] =  self.temp_goal_list.tolist()
-                removed_goal_name = self.temp_goal_names.pop(goal_to_be_removed_ind)
-                print(f'&&&&&&&&&&&&&&&&&&&&&&& {self.temp_goal_list} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
-                print(f'&&&&&&&&&&&&&&&&&&&&&&& {self.temp_goal_names} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+                if curr_goal:
+                    goal_to_be_removed_ind = self.temp_goal_list.tolist().index(curr_goal)
+                    print(f'&&&&&&&&&&&&&&&&&&&&&&& {goal_to_be_removed_ind} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+                    self.temp_goal_list = np.delete(self.temp_goal_list, goal_to_be_removed_ind)
+                    self.info['remaining_goal_cat_id'] =  self.temp_goal_list.tolist()
+                    removed_goal_name = self.temp_goal_names.pop(goal_to_be_removed_ind)
+                    print(f'&&&&&&&&&&&&&&&&&&&&&&& {self.temp_goal_list} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+                    print(f'&&&&&&&&&&&&&&&&&&&&&&& {self.temp_goal_names} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+                # else:
+                #     self.temp_goal_list = []
+                #     self.temp_goal_names = []
 
             if len(self.temp_goal_names) != 0:
                 

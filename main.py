@@ -334,7 +334,7 @@ def main():
         p_input['new_goal'] = 1 # is it a new long term goal?
         p_input['found_goal'] = 0 #found the long term goal?
         p_input['wait'] = wait_env[e] or finished[e] # any scene done or all scenes done?
-        p_input['curr_goal'] = to_be_popped
+        p_input['curr_goal'] = to_be_popped[e]
         if args.visualize or args.print_images:
             local_map[e, -1, :, :] = 1e-5
             p_input['sem_map_pred'] = local_map[e, 4:, :,
@@ -602,7 +602,9 @@ def main():
             p_input['new_goal'] = l_step == args.num_local_steps - 1
             p_input['found_goal'] = found_goal[e]
             p_input['wait'] = wait_env[e] or finished[e]
-            p_input['curr_goal'] = to_be_popped
+            p_input['curr_goal'] = to_be_popped[e]
+            if found_goal[e]==1 and to_be_popped is None:
+                raise ValueError('found goal but nothing to be popped')
             if args.visualize or args.print_images:
                 local_map[e, -1, :, :] = 1e-5
                 p_input['sem_map_pred'] = local_map[e, 4:, :,
