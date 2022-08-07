@@ -320,6 +320,8 @@ def main():
 
     goal_maps = [np.zeros((local_w, local_h)) for _ in range(num_scenes)]
 
+    to_be_popped = [None for _ in range(num_scenes)]
+
     for e in range(num_scenes):
         goal_maps[e][global_goals[e][0], global_goals[e][1]] = 1
 
@@ -332,10 +334,11 @@ def main():
         p_input['new_goal'] = 1 # is it a new long term goal?
         p_input['found_goal'] = 0 #found the long term goal?
         p_input['wait'] = wait_env[e] or finished[e] # any scene done or all scenes done?
+        p_input['curr_goal'] = to_be_popped
         if args.visualize or args.print_images:
             local_map[e, -1, :, :] = 1e-5
-            p_input['sem_map_pred'] = local_map[e, 4:, :, :
-                                                ].argmax(0).cpu().numpy()
+            p_input['sem_map_pred'] = local_map[e, 4:, :,
+                                                :].argmax(0).cpu().numpy()
 
     obs, _, done, infos = envs.plan_act_and_preprocess(planner_inputs)
     # list_obj_done[obj_iter] = done
@@ -565,26 +568,32 @@ def main():
         # ------------------------------------------------------------------
         # Update long-term goal if target object is found
         found_goal = [0 for _ in range(num_scenes)]
+        to_be_popped = [None for _ in range(num_scenes)]
         goal_maps = [np.zeros((local_w, local_h)) for _ in range(num_scenes)]
 
         for e in range(num_scenes):
             goal_maps[e][global_goals[e][0], global_goals[e][1]] = 1
 
         for e in range(num_scenes):
-
-            if wait_env[e] != 1:
-                cn = infos[e]['goal_cat_id'][present_idx[e]] + 4
+            # print(f'main remaining goals >>>>>>>>>>>>>>>>{infos[e]}')
+            for i in infos[e]['remaining_goal_cat_id']:
+                # if wait_env[e] != 1:
+                    # cn = infos[e]['goal_cat_id'][present_idx[e]] + 4
+                cn = i + 4
                 if local_map[e, cn, :, :].sum() != 0.:
                     cat_semantic_map = local_map[e, cn, :, :].cpu().numpy()
                     cat_semantic_scores = cat_semantic_map
                     cat_semantic_scores[cat_semantic_scores > 0] = 1.
                     goal_maps[e] = cat_semantic_scores
                     found_goal[e] = 1
+                    to_be_popped[e] = i
+                    print(f'*****************##################$$$$$$$$$$$$$$$$${cn}$$$$$$$$$$$$#############************')
+                    break
         # ------------------------------------------------------------------
 
         # ------------------------------------------------------------------
         # Take action and get next observation
-        planner_inputs = [{} for e in range(num_scenes)]
+        planner_inputs = [{} for _ in range(num_scenes)]
         for e, p_input in enumerate(planner_inputs):
             p_input['map_pred'] = local_map[e, 0, :, :].cpu().numpy()
             p_input['exp_pred'] = local_map[e, 1, :, :].cpu().numpy()
@@ -593,6 +602,7 @@ def main():
             p_input['new_goal'] = l_step == args.num_local_steps - 1
             p_input['found_goal'] = found_goal[e]
             p_input['wait'] = wait_env[e] or finished[e]
+            p_input['curr_goal'] = to_be_popped
             if args.visualize or args.print_images:
                 local_map[e, -1, :, :] = 1e-5
                 p_input['sem_map_pred'] = local_map[e, 4:, :,

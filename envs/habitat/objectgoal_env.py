@@ -78,6 +78,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.info['success'] = []
         self.info['is_it_done'] = False
         self.info['episode_count'] =  0 
+        self.info['remaining_goal_cat_id'] = None
 
     def load_new_episode(self):
         """The function loads a fixed episode from the episode dataset. This
@@ -201,7 +202,7 @@ class ObjectGoal_Env(habitat.RLEnv):
                     if value == goal_idx[i]:
                         goal_name.append(key)
 
-            print(f"In this episode we wish to look for : {goal_name[0]} and {goal_name[1]}")
+            # print(f"In this episode we wish to look for : {goal_name[0]} and {goal_name[1]}")
             selem = skimage.morphology.disk(2)
             traversible = skimage.morphology.binary_dilation(
                 self.sem_map[0], selem) != True
@@ -214,10 +215,15 @@ class ObjectGoal_Env(habitat.RLEnv):
 
             self.selem_goal = selem
                 
-            #Setting the ground truth for 0th goal object
-            goal_map = skimage.morphology.binary_dilation(
-                self.sem_map[goal_idx[0] + 1], selem) != True
-            goal_map = 1 - goal_map
+            #Setting the ground truth for all goals
+            for obj_iter, a_goal_ind in enumerate(goal_idx):
+                tmp_goal_map = skimage.morphology.binary_dilation(
+                    self.sem_map[a_goal_ind + 1], selem) != True
+                tmp_goal_map = 1 - tmp_goal_map
+                # planner.set_multi_goal(tmp_goal_map)
+                # distance_check.append(planner.selected_index)
+                
+                goal_map = np.logical_or(goal_map, tmp_goal_map) if obj_iter>0 else tmp_goal_map
 
             planner.set_multi_goal(goal_map)
 
@@ -357,12 +363,13 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.info['goal_name'] = self.goal_name.copy()
         temp = [False]*args.obj_count
         self.info['done_list'] = np.reshape(np.array(temp,dtype=bool), (1,args.obj_count))
+        self.info['remaining_goal_cat_id'] = self.goal_idx.copy()
         
         # self.info['obj_count'] = len(self.goal_idx)
         # self.info['count_']  = 0
         return state, self.info
 
-    def step(self, action):
+    def step(self, action, curr_goal):
         """Function to take an action in the environment.
 
         Args:
@@ -405,22 +412,32 @@ class ObjectGoal_Env(habitat.RLEnv):
                 if not obj_done:
                     self.info['done_list'][0][i] =True
                     break
-            # self.info['done_list'][0][res] = True
-            
-            
-            # self.info['done_list'] = np.append(self.info['done_list'],True)
-            # print(f"THIS IS THE DONE LIST AFTER MESS UP : --- {self.info['done_list']}")
+
+            removed_goal_name = ""
             if len(self.temp_goal_names) != 0:
-                self.temp_goal_list.tolist().pop(0)
-                self.temp_goal_names.pop(0)
+                print(f'&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&{self.temp_goal_list.tolist()}')
+                print(curr_goal)
+                goal_to_be_removed_ind = self.temp_goal_list.tolist().index(curr_goal[0])
+                print(f'&&&&&&&&&&&&&&&&&&&&&&& {goal_to_be_removed_ind} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+                self.temp_goal_list = np.delete(self.temp_goal_list, goal_to_be_removed_ind)
+                self.info['remaining_goal_cat_id'] =  self.temp_goal_list.tolist()
+                removed_goal_name = self.temp_goal_names.pop(goal_to_be_removed_ind)
+                print(f'&&&&&&&&&&&&&&&&&&&&&&& {self.temp_goal_list} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+                print(f'&&&&&&&&&&&&&&&&&&&&&&& {self.temp_goal_names} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
 
             if len(self.temp_goal_names) != 0:
                 
-                goal_map = skimage.morphology.binary_dilation(
-                    self.sem_map[self.temp_goal_list[0] + 1], self.selem_goal) != True
-                goal_map = 1 - goal_map
+                # goal_map = skimage.morphology.binary_dilation(
+                #     self.sem_map[self.temp_goal_list[0] + 1], self.selem_goal) != True
+                # goal_map = 1 - goal_map
+                for obj_iter, a_goal_ind in enumerate(self.temp_goal_list.tolist()):
+                    tmp_goal_map = skimage.morphology.binary_dilation(
+                        self.sem_map[a_goal_ind + 1], self.selem_goal) != True
+                    tmp_goal_map = 1 - tmp_goal_map
+                    goal_map = np.logical_or(goal_map, tmp_goal_map) if obj_iter>0 else tmp_goal_map
+
                 print(f"Should be : T  ,  F : -------------= {self.info['done_list']}")
-                print(f"Yay! We found the previous goal. Setting goal map : {self.temp_goal_names[0]} ")
+                print(f"Yay! We found the {removed_goal_name} goal. Setting goal map with remaining goals {self.temp_goal_names}")
                 self.gt_planner.set_multi_goal(goal_map)
                 # self.info['done_list'].append(True)
                 '''

@@ -121,12 +121,12 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
 
             # act
             action = {'action': action}
-            obs, rew, done, info = super().step(action)
+            obs, rew, done, info = super().step(action, planner_inputs["curr_goal"])
 
             # preprocess obs
             obs = self._preprocess_obs(obs) 
             self.last_action = action['action']
-            self.obs = obs
+            self.obs = obs #shape (20, 120, 160) -> 20 = r,g,b,d,navigable, 15 categories
             self.info = info
 
             info['g_reward'] += rew
@@ -313,11 +313,13 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
             depth = depth[ds // 2::ds, ds // 2::ds]
             sem_seg_pred = sem_seg_pred[ds // 2::ds, ds // 2::ds]
 
+        print(f'***********************{sem_seg_pred.shape}************************')
         depth = np.expand_dims(depth, axis=2)
         state = np.concatenate((rgb, depth, sem_seg_pred),
                                axis=2).transpose(2, 0, 1)
 
-        return state
+        print(f'***********************{state.shape}************************') 
+        return state # shape (20, 120, 160)
 
     def _preprocess_depth(self, depth, min_d, max_d):
         depth = depth[:, :, 0] * 1
