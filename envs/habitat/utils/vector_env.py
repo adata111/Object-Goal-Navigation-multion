@@ -51,6 +51,8 @@ PLAN_ACT_AND_PREPROCESS = "plan_act_and_preprocess"
 COUNT_EPISODES_COMMAND = "count_episodes"
 EPISODE_OVER = "episode_over"
 GET_METRICS = "get_metrics"
+RESET_IS_IT_DONE = "reset_is_it_done"
+RESET_METR_PER_EP = "reset_metr_per_ep"
 
 
 def _make_env_fn(
@@ -233,6 +235,14 @@ class VectorEnv:
                     result = env.get_metrics()
                     connection_write_fn(result)
 
+                elif command == RESET_IS_IT_DONE:
+                    result = env.reset_is_it_done()
+                    connection_write_fn(result)
+
+                elif command == RESET_METR_PER_EP:
+                    result = env.reset_metr_per_ep()
+                    connection_write_fn(result)
+
                 else:
                     raise NotImplementedError
 
@@ -317,6 +327,35 @@ class VectorEnv:
             results.append(read_fn())
         self._is_waiting = False
         return results
+
+    def reset_is_it_done(self):
+        r"""Reset info[is_it_done]
+        """
+        self._is_waiting = True
+        for write_fn in self._connection_write_fns:
+            write_fn((RESET_IS_IT_DONE, None))
+        results = []
+        for read_fn in self._connection_read_fns:
+            results.append(read_fn())
+
+        self._is_waiting = False
+        return results
+
+    def reset_metr_per_ep(self):
+        r"""Reset self.info['distance_to_goal'] 
+        self.info['spl'] 
+        self.info['success'] 
+        """
+        self._is_waiting = True
+        for write_fn in self._connection_write_fns:
+            write_fn((RESET_METR_PER_EP, None))
+        results = []
+        for read_fn in self._connection_read_fns:
+            results.append(read_fn())
+
+        self._is_waiting = False
+        return results
+
 
     def reset(self):
         r"""Reset all the vectorized environments

@@ -371,20 +371,7 @@ def main():
         l_masks = torch.FloatTensor([0 if x else 1
                                      for x in done]).to(device)
         g_masks *= l_masks
-        # print(type(infos[e]['done_list']))
-        '''
-        created a new key in the info dictionary for passign around the done_list : which keeps a track of all done values for that particular episode
-            - x should be a numpy array ; instead been shown as float - sorted
-            - we need to work on initi of th e np array so that everytime the list doesn't contain just True ; it beats the purpose - sorted 
-        '''
         
-
-        # for e,y in enumerate(infos[e]['done_list']):
-        #     print(f"E ------- {e}")
-        #     print(f"The y is -----------{y}")
-        # print(infos[:][:])
-        # print(type(infos[:][:]))
-
         episode_count = [0]*args.num_processes
 
         for e, x in enumerate(infos):
@@ -404,7 +391,7 @@ def main():
             assert infos[e]['is_it_done'] == x['is_it_done'] , "DUHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH"
             if infos[e]['is_it_done']:
 
-                infos[e]['is_it_done'] = bool(False)
+                _ = envs.reset_is_it_done()
                 print(f"THE MODIFIED VALUE OF IS_IT_DONE  for {e} thread : is -----> {x['is_it_done']}")
                 print(f"{e} th threaded just finished an episode.")
                 print(f"Completed episode Count for {e} th thread is : {x['episode_count']}")
@@ -414,9 +401,8 @@ def main():
                 spl = infos[e]['spl']
                 success = infos[e]['success']
                 dist = infos[e]['distance_to_goal']
-                spl_per_category[infos[e]['goal_name'][obj_iter[e]]].append(spl)
-                success_per_category[infos[e]['goal_name'][obj_iter[e]]].append(success)
-                # obj_iter[e] += 1
+                spl_per_category[infos[e]['goal_name'][present_idx[e] - 1]].append(spl)
+                success_per_category[infos[e]['goal_name'][present_idx[e] -1]].append(success)
                 if args.eval: #still left to change
                     episode_success[e].append(success)
                     episode_spl[e].append(spl)
@@ -428,12 +414,7 @@ def main():
                     episode_spl.append(spl)
                     episode_dist.append(dist)
 
-                # if obj_iter[e] == args.obj_count :
-                # print(f"##############################OBJ-ITER when IT says ALL DONE : {obj_iter[e]}")
-                # print(f"Done with search all the objects : {infos[e]['goal_name']}")
-                # obj_iter[e] = 0
-                # envs.auto_reset_done = True
-                # envs.reset()
+                _ = envs.reset_metr_per_ep() # restting the metrics per episode
                 
                 wait_env[e] = 1.
                 update_intrinsic_rew(e)
@@ -461,9 +442,6 @@ def main():
             local_map[e, 2:4, loc_r - 2:loc_r + 3, loc_c - 2:loc_c + 3] = 1.
 
         # ------------------------------------------------------------------
-        '''
-        obj_iter mess up needs to be fixed : full raita - sorted
-        '''
         # ------------------------------------------------------------------
         # Global Policy
         if l_step == args.num_local_steps - 1:
@@ -670,6 +648,18 @@ def main():
                 total_success = []
                 total_spl = []
                 total_dist = []
+                print(type(episode_success))
+                print(f" EPISODE SUCCESS : {episode_success}")
+                # print(f"This is episode success length : {len(episode_success)}")
+                # print(f"This is the episode count: {sum(infos[:]['episode_count'])}")
+
+                print(f" EPISODE SUCCESS : {episode_success}")
+                # print(f"This is episode success length : {len(episode_success)}")
+                # print(f"This is the episode count: {sum(infos[:]['episode_count'])}")
+
+                print(f" EPISODE SUCCESS : {episode_success}")
+                # print(f"This is episode success length : {len(episode_success)}")
+                # print(f"This is the episode count: {sum(infos[:]['episode_count'])}")
                 for e in range(args.num_processes):
                     for acc in episode_success[e]:
                         total_success.append(acc)

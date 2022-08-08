@@ -53,5 +53,13 @@ class VecPyTorch():
         reward = torch.from_numpy(reward).float()
         return obs, reward, done, info
 
+    def reset_is_it_done(self):
+        result = self.venv.reset_is_it_done()
+        return result
+
+    def reset_metr_per_ep(self):
+        result = self.venv.reset_metr_per_ep()
+        return result
+
     def close(self):
         return self.venv.close()

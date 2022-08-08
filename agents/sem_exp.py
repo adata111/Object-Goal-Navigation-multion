@@ -81,6 +81,16 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
 
         return obs, info
 
+    def reset_is_it_done(self):
+        self.info['is_it_done'] = False
+        return self.info['is_it_done']
+
+    def reset_metr_per_ep(self):
+        self.info['success'] = 0.
+        self.info['spl'] = 0.
+        self.info['distance_to_goal'] = 0.
+        return self.info
+
     def plan_act_and_preprocess(self, planner_inputs):
         """Function responsible for planning, taking the action and
         preprocessing observations

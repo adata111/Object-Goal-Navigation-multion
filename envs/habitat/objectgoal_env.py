@@ -73,9 +73,9 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.last_sim_location = None
         self.trajectory_states = []
         self.info = {}
-        self.info['distance_to_goal'] = []
-        self.info['spl'] = []
-        self.info['success'] = []
+        self.info['distance_to_goal'] = 0
+        self.info['spl'] = 0
+        self.info['success'] = 0
         self.info['is_it_done'] = False
         self.info['episode_count'] =  0 
         self.info['remaining_goal_cat_id'] = None
@@ -365,8 +365,8 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.info['done_list'] = np.reshape(np.array(temp,dtype=bool), (1,args.obj_count))
         self.info['remaining_goal_cat_id'] = self.goal_idx.copy()
         
-        # self.info['obj_count'] = len(self.goal_idx)
-        # self.info['count_']  = 0
+        self.dx_ckp = 0
+        self.dy_ckp = 0
         return state, self.info
 
     def step(self, action, curr_goal):
@@ -395,9 +395,9 @@ class ObjectGoal_Env(habitat.RLEnv):
         # Get pose change
         dx, dy, do = self.get_pose_change()
         self.info['sensor_pose'] = [dx, dy, do]
-        self.path_length += pu.get_l2_distance(0, dx, 0, dy)
+        self.path_length += pu.get_l2_distance(self.dx_ckp, dx, self.dy_ckp, dy)
 
-        spl, success, dist = 0., 0., 0.
+        # spl, success, dist = 0., 0., 0. # even this has to be such that 1 time initialize for one episode ; currently every time we take a step
         if done:
             '''
             1. made a done_list to append all the done values; then set the done to False so that teh flow of program osn't distrubed
@@ -431,9 +431,13 @@ class ObjectGoal_Env(habitat.RLEnv):
 
             if len(self.temp_goal_names) != 0:
                 
-                # goal_map = skimage.morphology.binary_dilation(
-                #     self.sem_map[self.temp_goal_list[0] + 1], self.selem_goal) != True
-                # goal_map = 1 - goal_map
+                '''intra-episode metric calculation.'''
+                spl, success, dist = self.get_metrics()
+                self.info['distance_to_goal'] = dist
+                self.info['spl'] = spl
+                self.info['success'] = success
+
+                '''Prep for next part of episode.'''
                 for obj_iter, a_goal_ind in enumerate(self.temp_goal_list.tolist()):
                     tmp_goal_map = skimage.morphology.binary_dilation(
                         self.sem_map[a_goal_ind + 1], self.selem_goal) != True
@@ -443,10 +447,16 @@ class ObjectGoal_Env(habitat.RLEnv):
                 print(f"Should be : T  ,  F : -------------= {self.info['done_list']}")
                 print(f"Yay! We found the {removed_goal_name} goal. Setting goal map with remaining goals {self.temp_goal_names}")
                 self.gt_planner.set_multi_goal(goal_map)
-                # self.info['done_list'].append(True)
-                '''
-                Should we set the temp_done to equal False : Lets try and find out
-                '''
+
+                ''' Damage Control - restting for next part of metrics'''
+                # curr_loc = self.sim_continuous_to_sim_map(self.get_sim_location())
+                curr_loc = self.get_sim_location()
+                # print(f"CURR_LOC : {curr_loc}")
+                temp_map_loc = int(curr_loc[0]) , int(curr_loc[1])
+                self.starting_distance = self.gt_planner.fmm_dist[temp_map_loc] \
+                                                                            / 20.0 + self.object_boundary
+                self.path_length = 1e-5
+
                 if all(self.info['done_list'][0].tolist()):
                     done = True
                     self.stopped  = True
@@ -458,8 +468,8 @@ class ObjectGoal_Env(habitat.RLEnv):
                     self.stopped = False
                     self.last_sim_location = self.get_sim_location()
                     self.info['time'] = self.timestep
-                    dx, dy, do = self.get_pose_change()
-                    self.info['sensor_pose'] = [dx, dy, do]
+                    self.dx_ckp, self.dy_ckp, self.do_ckp = self.get_pose_change()
+                    self.info['sensor_pose'] = [self.dx_ckp, self.dy_ckp, self.do_ckp]
 
             else:
                 print(f"Yay! We found all the goals!!! ")
@@ -470,11 +480,19 @@ class ObjectGoal_Env(habitat.RLEnv):
                 print("TYPE-2 UPDATION")
                 # self.info['episode_count'] += 1
                 # self.auto_reset_done = True
+                self.info['time'] = self.timestep
+                dx, dy, do = self.get_pose_change()
+                self.info['sensor_pose'] = [dx, dy, do]
 
-            spl, success, dist = self.get_metrics()
-            self.info['distance_to_goal'].append(dist)
-            self.info['spl'].append(spl)
-            self.info['success'].append(success)
+                spl, success, dist = self.get_metrics()
+                self.info['distance_to_goal'] += dist # can decide on dividing by some coeff
+                self.info['spl'] += spl #can decide to have some coefff ; basically now adding
+                self.info['success'] = success and self.info['success']
+
+            # spl, success, dist = self.get_metrics()
+            # self.info['distance_to_goal'].append(dist)
+            # self.info['spl'].append(spl)
+            # self.info['success'].append(success)
 
         rgb = obs['rgb'].astype(np.uint8)
         depth = obs['depth']
