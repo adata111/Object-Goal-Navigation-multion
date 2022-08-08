@@ -324,12 +324,10 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
             depth = depth[ds // 2::ds, ds // 2::ds]
             sem_seg_pred = sem_seg_pred[ds // 2::ds, ds // 2::ds]
 
-        print(f'***********************{sem_seg_pred.shape}************************')
         depth = np.expand_dims(depth, axis=2)
         state = np.concatenate((rgb, depth, sem_seg_pred),
                                axis=2).transpose(2, 0, 1)
 
-        print(f'***********************{state.shape}************************') 
         return state # shape (20, 120, 160)
 
     def _preprocess_depth(self, depth, min_d, max_d):

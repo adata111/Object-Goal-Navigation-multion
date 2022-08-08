@@ -351,10 +351,9 @@ def main():
 
     for step in range(args.num_training_frames // args.num_processes + 1):
         
-        # present_idx = [np.where(infos[e]['done_list'][0] == False)[0][0] for e in range(num_scenes)] 
         present_idx = [0]*num_scenes
         for e in range(num_scenes):
-            for i, obj_done in enumerate(infos[e]['done_list'][0]):
+            for i, obj_done in enumerate(list(infos[e]['done_dict'].values())):
                 if not obj_done:
                     present_idx[e] = i
                     break
@@ -371,22 +370,20 @@ def main():
         l_masks = torch.FloatTensor([0 if x else 1
                                      for x in done]).to(device)
         g_masks *= l_masks
-        
-        episode_count = [0]*args.num_processes
 
         for e, x in enumerate(infos):
             
-            print(f"This is infos[{e}]['done_list'] : {infos[e]['done_list']}")
-            # print(type(infos[e]['done_list']))
+            print(f"This is infos[{e}]['done_dict'] : {infos[e]['done_dict']}")
+            # print(type(infos[e]['done_dict']))
             # print(type(done))
             # print(type(x))
             print(f"THIS IS E: {e}")
-            # print(f"{x['done_list'].tolist()} This is done list when turned to list")
-            # print(all(x['done_list'].tolist()))
+            # print(f"{x['done_dict'].tolist()} This is done list when turned to list")
+            # print(all(x['done_dict'].tolist()))
             '''
             if all element of this supposed np array is True then call for episode termination
             '''
-            # if all(x['done_list'].tolist()[0]): 
+            # if all(x['done_dict'].tolist()[0]): 
             print(f"THE VALUE OF IS_IT_DONE for {e} thread is :  ---> {x['is_it_done']}")
             assert infos[e]['is_it_done'] == x['is_it_done'] , "DUHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH"
             if infos[e]['is_it_done']:

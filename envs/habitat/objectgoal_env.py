@@ -62,7 +62,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.map_obj_origin = None
         self.starting_loc = None
         self.starting_distance = None
-        self.done_list = []
+        self.done_dict = {}
 
         # Episode tracking info
         self.curr_distance = None
@@ -165,6 +165,7 @@ class ObjectGoal_Env(habitat.RLEnv):
 
         args = self.args
         goal_name = []
+        done_dict = {}
         self.scene_path = self.habitat_env.sim.config.SCENE
         self.scene_name = self.scene_path.split("/")[-1].split(".")[0]
 
@@ -194,13 +195,12 @@ class ObjectGoal_Env(habitat.RLEnv):
             np.random.seed(int(time.time()))
             goal_idx = np.random.choice(possible_cats, size = args.obj_count, replace=False)
             # goal_idx = [3,5]
-
-            # self.done_list = [False] * args.obj_count
             
             for i in range(args.obj_count):
                 for key, value in coco_categories.items():
                     if value == goal_idx[i]:
                         goal_name.append(key)
+                        done_dict[key] = False
 
             # print(f"In this episode we wish to look for : {goal_name[0]} and {goal_name[1]}")
             selem = skimage.morphology.disk(2)
@@ -270,6 +270,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.map_obj_origin = map_obj_origin
         self.temp_goal_list = goal_idx
         self.temp_goal_names = goal_name
+        self.done_dict = done_dict
 
         self.starting_distance = self.gt_planner.fmm_dist[self.starting_loc] \
             / 20.0 + self.object_boundary
@@ -362,7 +363,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.info['goal_cat_id'] = self.goal_idx.copy()
         self.info['goal_name'] = self.goal_name.copy()
         temp = [False]*args.obj_count
-        self.info['done_list'] = np.reshape(np.array(temp,dtype=bool), (1,args.obj_count))
+        self.info['done_dict'] = self.done_dict
         self.info['remaining_goal_cat_id'] = self.goal_idx.copy()
         
         self.dx_ckp = 0
@@ -400,24 +401,23 @@ class ObjectGoal_Env(habitat.RLEnv):
         # spl, success, dist = 0., 0., 0. # even this has to be such that 1 time initialize for one episode ; currently every time we take a step
         if done:
             '''
-            1. made a done_list to append all the done values; then set the done to False so that teh flow of program osn't distrubed
+            1. made a done_dict to keep all the done values; then set the done to False so that teh flow of program osn't distrubed
             2. temp_goal_list and temp_goal_name are temporary copies of goal_idx and goal_name (both lists) ; so that we can pop 
                 and check if any more goals are left to explore
             '''
             # self.info['count_'] += 1
-            # print(f"THIS IS THE DONE LIST BEFORE MESS UP : --- {self.info['done_list']}")
             
-            # res = [i for i, val in enumerate(np.where(self.info['done_list'] == False)) if val]
-            for i, obj_done in enumerate(self.info['done_list'][0]):
-                if not obj_done:
-                    self.info['done_list'][0][i] =True
-                    break
+            # res = [i for i, val in enumerate(np.where(self.info['done_dict'] == False)) if val]
+            # for i, obj_done in enumerate(self.info['done_dict'][0]):
+            #     if not obj_done:
+            #         self.info['done_dict'][0][i] =True
+            #         break
 
             removed_goal_name = ""
             if len(self.temp_goal_names) != 0:
                 print(f'&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&{self.temp_goal_list.tolist()}')
                 print(curr_goal)
-                if curr_goal:
+                if curr_goal is not None:
                     goal_to_be_removed_ind = self.temp_goal_list.tolist().index(curr_goal)
                     print(f'&&&&&&&&&&&&&&&&&&&&&&& {goal_to_be_removed_ind} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
                     self.temp_goal_list = np.delete(self.temp_goal_list, goal_to_be_removed_ind)
@@ -425,6 +425,7 @@ class ObjectGoal_Env(habitat.RLEnv):
                     removed_goal_name = self.temp_goal_names.pop(goal_to_be_removed_ind)
                     print(f'&&&&&&&&&&&&&&&&&&&&&&& {self.temp_goal_list} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
                     print(f'&&&&&&&&&&&&&&&&&&&&&&& {self.temp_goal_names} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+                    self.info['done_dict'][removed_goal_name] = True
                 # else:
                 #     self.temp_goal_list = []
                 #     self.temp_goal_names = []
@@ -444,7 +445,7 @@ class ObjectGoal_Env(habitat.RLEnv):
                     tmp_goal_map = 1 - tmp_goal_map
                     goal_map = np.logical_or(goal_map, tmp_goal_map) if obj_iter>0 else tmp_goal_map
 
-                print(f"Should be : T  ,  F : -------------= {self.info['done_list']}")
+                print(f"Should be : T  ,  F : -------------= {self.info['done_dict']}")
                 print(f"Yay! We found the {removed_goal_name} goal. Setting goal map with remaining goals {self.temp_goal_names}")
                 self.gt_planner.set_multi_goal(goal_map)
 
@@ -457,7 +458,7 @@ class ObjectGoal_Env(habitat.RLEnv):
                                                                             / 20.0 + self.object_boundary
                 self.path_length = 1e-5
 
-                if all(self.info['done_list'][0].tolist()):
+                if all(list(self.info['done_dict'].values())):
                     done = True
                     self.stopped  = True
                     self.info['is_it_done'] = True
@@ -473,7 +474,7 @@ class ObjectGoal_Env(habitat.RLEnv):
 
             else:
                 print(f"Yay! We found all the goals!!! ")
-                print(f"This is the done list when it has found everything : {self.info['done_list']}")
+                print(f"This is the done list when it has found everything : {self.info['done_dict']}")
                 done = True
                 self.stopped = True
                 self.info['is_it_done'] = True
