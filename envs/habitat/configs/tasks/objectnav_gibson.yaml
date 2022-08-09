@@ -39,7 +39,7 @@ TASK:
 DATASET:
   TYPE: PointNav-v1
   SPLIT: train
-  DATA_PATH: "data/datasets/objectnav/gibson/v1/{split}/{split}.json.gz"
-  EPISODES_DIR: "data/datasets/objectnav/gibson/v1/{split}/"
-  SCENES_DIR: "data/scene_datasets/" 
+  DATA_PATH: "../data/datasets/objectnav/gibson/v1/{split}/{split}.json.gz"
+  EPISODES_DIR: "../data/datasets/objectnav/gibson/v1/{split}/"
+  SCENES_DIR: "../data/scene_datasets/" 
 
