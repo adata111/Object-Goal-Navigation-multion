@@ -192,7 +192,7 @@ class ObjectGoal_Env(habitat.RLEnv):
                 print("No valid objects for {}".format(floor_height))
                 eps = eps - 1
                 continue
-            np.random.seed(int(time.time()))
+            # np.random.seed(int(time.time()))
             goal_idx = np.random.choice(possible_cats, size = args.obj_count, replace=False)
             # goal_idx = [3,5]
             
@@ -202,7 +202,7 @@ class ObjectGoal_Env(habitat.RLEnv):
                         goal_name.append(key)
                         done_dict[key] = False
 
-            # print(f"In this episode we wish to look for : {goal_name[0]} and {goal_name[1]}")
+            print(f"In this episode we wish to look for : {goal_name}")
             selem = skimage.morphology.disk(2)
             traversible = skimage.morphology.binary_dilation(
                 self.sem_map[0], selem) != True
@@ -502,7 +502,7 @@ class ObjectGoal_Env(habitat.RLEnv):
         self.timestep += 1
         self.info['time'] = self.timestep
 
-        return state, rew, done, self.info
+        return state, rew, self.info['is_it_done'], self.info
 
     def get_reward_range(self):
         """This function is not used, Habitat-RLEnv requires this function"""
@@ -541,11 +541,11 @@ class ObjectGoal_Env(habitat.RLEnv):
 
     def get_done(self, observations):
         if self.info['time'] >= self.args.max_episode_length - 1:
-            done = False
+            done = True
             self.info['is_it_done'] = True
             self.info['time'] = self.timestep
             print("TYPE-3 UPDATION")
-            return not done
+            return done
 
         elif self.stopped:
             done = True

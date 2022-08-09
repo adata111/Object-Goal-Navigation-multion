@@ -69,7 +69,7 @@ def get_args():
                         help='Frame width (default:160)')
     parser.add_argument('-fh', '--frame_height', type=int, default=120,
                         help='Frame height (default:120)')
-    parser.add_argument('-el', '--max_episode_length', type=int, default=1000,
+    parser.add_argument('-el', '--max_episode_length', type=int, default=200,
                         help="""Maximum episode length""")
     parser.add_argument("--task_config", type=str,
                         default="tasks/objectnav_gibson.yaml",
