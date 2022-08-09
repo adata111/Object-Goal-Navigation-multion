@@ -242,13 +242,15 @@ def main():
     global_input = torch.zeros(num_scenes, ngc, local_w, local_h)
     global_orientation = torch.zeros(num_scenes, 1).long()
     intrinsic_rews = torch.zeros(num_scenes).to(device)
-    extras = torch.zeros(num_scenes, args.obj_count+1)
+    
+    extras_dim = 2
+    extras = torch.zeros(num_scenes, extras_dim)
 
     # Storage
     g_rollouts = GlobalRolloutStorage(args.num_global_steps,
                                       num_scenes, g_observation_space.shape,
                                       g_action_space, g_policy.rec_state_size,
-                                      args.obj_count+1).to(device)
+                                      extras_dim).to(device)
 
     if args.load != "0":
         print("Loading model {}".format(args.load))
@@ -296,7 +298,8 @@ def main():
     goal_cat_id = []
     for i in range(args.obj_count):
         goal_cat_id.append(torch.from_numpy(np.asarray(tmp_goal_cat_id[:,i])))
-    extras = torch.zeros(num_scenes, 1+args.obj_count)
+
+    extras = torch.zeros(num_scenes, extras_dim)
     extras[:, 0] = global_orientation[:, 0]
     for i in range(args.obj_count):
         extras[:,i+1] = goal_cat_id[i] 
@@ -493,7 +496,7 @@ def main():
                 goal_cat_id.append(torch.from_numpy(np.asarray(tmp_goal_cat_id[:,i])))
             # goal_cat_id = [torch.from_numpy(np.asarray(tmp_goal_cat_id[:,i]) for i in range(obj_count))]
 
-            extras = torch.zeros(num_scenes, 1+args.obj_count)
+            extras = torch.zeros(num_scenes, extras_dim)
             extras[:, 0] = global_orientation[:, 0]
             for i in range(args.obj_count):
                 extras[:,i+1] = goal_cat_id[i] 
