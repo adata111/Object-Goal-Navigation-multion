@@ -23,6 +23,31 @@ def draw_line(start, end, mat, steps=25, w=1):
         mat[x - w:x + w, y - w:y + w] = 1
     return mat
 
+def change_remaining_goals(goal_names, vis_image):
+    for i in range(50):
+       vis_image[i, :] = [255, 255, 255]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    fontScale = 1
+    color = (20, 20, 20)  # BGR
+    thickness = 2
+    text = "Observations (Goal: {})".format(goal_names)
+    textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
+    textX = (640 - textsize[0]) // 2 + 15
+    textY = (50 + textsize[1]) // 2
+    vis_image = cv2.putText(vis_image, text, (textX, textY),
+                            font, fontScale, color, thickness,
+                            cv2.LINE_AA)
+
+
+    text = "Predicted Semantic Map"
+    textsize = cv2.getTextSize(text, font, fontScale, thickness)[0]
+    textX = 640 + (480 - textsize[0]) // 2 + 30
+    textY = (50 + textsize[1]) // 2
+    vis_image = cv2.putText(vis_image, text, (textX, textY),
+                            font, fontScale, color, thickness,
+                            cv2.LINE_AA)
+
+    return vis_image
 
 def init_vis_image(goal_name, legend):
     vis_image = np.ones((655, 1165, 3)).astype(np.uint8) * 255
