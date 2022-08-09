@@ -242,7 +242,7 @@ def main():
     global_input = torch.zeros(num_scenes, ngc, local_w, local_h)
     global_orientation = torch.zeros(num_scenes, 1).long()
     intrinsic_rews = torch.zeros(num_scenes).to(device)
-    
+
     extras_dim = 2
     extras = torch.zeros(num_scenes, extras_dim)
 
@@ -292,17 +292,13 @@ def main():
     global_input[:, 4:8, :, :] = nn.MaxPool2d(args.global_downscaling)(
         full_map[:, 0:4, :, :])
     global_input[:, 8:, :, :] = local_map[:, 4:, :, :].detach()
-    tmp_goal_cat_id = np.asarray(
-        [infos[env_idx]['goal_cat_id'] for env_idx
-         in range(num_scenes)])
-    goal_cat_id = []
-    for i in range(args.obj_count):
-        goal_cat_id.append(torch.from_numpy(np.asarray(tmp_goal_cat_id[:,i])))
+    goal_cat_id = torch.from_numpy(np.asarray(
+        [infos[env_idx]['goal_cat_id'][0] for env_idx
+        in range(num_scenes)]))
 
     extras = torch.zeros(num_scenes, extras_dim)
     extras[:, 0] = global_orientation[:, 0]
-    for i in range(args.obj_count):
-        extras[:,i+1] = goal_cat_id[i] 
+    extras[:, 1] = goal_cat_id 
 
     g_rollouts.obs[0].copy_(global_input)
     g_rollouts.extras[0].copy_(extras)
@@ -487,26 +483,9 @@ def main():
                     full_map[:, 0:4, :, :])
             global_input[:, 8:, :, :] = local_map[:, 4:, :, :].detach()
 
-            tmp_goal_cat_id = np.asarray(
-                [infos[env_idx]['goal_cat_id'] for env_idx
-                in range(num_scenes)])
-            goal_cat_id = []
-            for i in range(args.obj_count):
-                # print(torch.from_numpy(np.array(tmp_goal_cat_id[:,i]))) 
-                goal_cat_id.append(torch.from_numpy(np.asarray(tmp_goal_cat_id[:,i])))
-            # goal_cat_id = [torch.from_numpy(np.asarray(tmp_goal_cat_id[:,i]) for i in range(obj_count))]
-
-            extras = torch.zeros(num_scenes, extras_dim)
-            extras[:, 0] = global_orientation[:, 0]
-            for i in range(args.obj_count):
-                extras[:,i+1] = goal_cat_id[i] 
-            # print(extras)
-            # print(extras[:,3])
-            # print(extras[:,3].shape)
-            
-            # goal_cat_id = torch.from_numpy(np.asarray(
-            #     [infos[env_idx]['goal_cat_id'][present_idx[env_idx]] for env_idx
-            #      in range(num_scenes)]))
+            goal_cat_id = torch.from_numpy(np.asarray(
+                [infos[env_idx]['goal_cat_id'][present_idx[env_idx]] for env_idx
+                 in range(num_scenes)]))
             
             # tmp = np.asarray(
             #     [infos[env_idx]['goal_cat_id'][present_idx[env_idx]] for env_idx
@@ -514,9 +493,9 @@ def main():
 
             # print(f'\n\n$$$$$$$$$$$%%%%%%%%%%%%%%%%% {goal_cat_id} {tmp.shape}%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%$$$$$$$$$$$$$$$$$$$$$$$$$\n\n')
 
-            # print(f"WE NOW PROCEED TO CALCULATE LONG TERM GOAL FOR : {present_idx[0]}")
-            # extras[:, 0] = global_orientation[:, 0]
-            # extras[:, 1] = goal_cat_id
+            print(f"WE NOW PROCEED TO CALCULATE LONG TERM GOAL FOR : {present_idx[0]}")
+            extras[:, 0] = global_orientation[:, 0]
+            extras[:, 1] = goal_cat_id
 
             # Get exploration reward and metrics
             g_reward = torch.from_numpy(np.asarray(

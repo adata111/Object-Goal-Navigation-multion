@@ -408,6 +408,10 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env):
         self.vis_image[50:530, 15:655] = self.rgb_vis
         self.vis_image[50:530, 670:1150] = sem_map_vis
 
+        # resetting the remaining goal names
+        remaining_goal_names = [name for name in list(self.info['done_dict'].keys()) if not self.info['done_dict'][name]]
+        self.vis_image = vu.change_remaining_goals(remaining_goal_names, self.vis_image)
+
         pos = (
             (start_x * 100. / args.map_resolution - gy1)
             * 480 / map_pred.shape[0],
